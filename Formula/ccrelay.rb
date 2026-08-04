@@ -8,6 +8,8 @@ class Ccrelay < Formula
   depends_on "uv" => :build
   depends_on "python@3.14"
 
+  preserve_rpath
+
   def install
     libexec.install Dir["*"]
     cd libexec do
