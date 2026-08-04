@@ -118,6 +118,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Formula/ccrelay.rb
+          if git diff --cached --quiet; then
+            exit 0
+          fi
           git commit -m "chore(homebrew): $RELEASE_TAG bottleを追加する"
           git pull --rebase origin main
           git push origin HEAD:main
