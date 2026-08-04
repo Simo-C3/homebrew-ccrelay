@@ -80,6 +80,9 @@ jobs:
             --json \
             --root-url="$RELEASE_ROOT/$RELEASE_TAG" \
             "$FORMULA"
+          for bottle in *.bottle*.tar.gz; do
+            mv "$bottle" "${bottle/--/-}"
+          done
 
       - name: Upload bottle artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
