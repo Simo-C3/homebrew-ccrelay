@@ -1,0 +1,34 @@
+class Ccrelay < Formula
+  desc "Local GitHub Copilot proxy for Codex"
+  homepage "https://github.com/Simo-C3/homebrew-ccrelay"
+  license "MIT"
+  head "https://github.com/Simo-C3/homebrew-ccrelay.git", branch: "main"
+
+  depends_on "rust" => :build
+  depends_on "uv" => :build
+  depends_on "python@3.14"
+
+  def install
+    libexec.install Dir["*"]
+    cd libexec do
+      system formula_opt_bin("uv")/"uv", "sync",
+             "--frozen",
+             "--no-dev",
+             "--no-editable",
+             "--python", formula_opt_bin("python@3.14")/"python3.14"
+    end
+    bin.install_symlink libexec/".venv/bin/ccrelay"
+  end
+
+  service do
+    run [opt_bin/"ccrelay", "proxy"]
+    keep_alive true
+    process_type :background
+    log_path var/"log/ccrelay.log"
+    error_log_path var/"log/ccrelay.log"
+  end
+
+  test do
+    assert_match "ccrelay", shell_output("#{bin}/ccrelay version")
+  end
+end
