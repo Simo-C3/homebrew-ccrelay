@@ -108,7 +108,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          gh release upload "$RELEASE_TAG" bottles/*.bottle.tar.gz \
+          gh release upload "$RELEASE_TAG" bottles/*.bottle*.tar.gz \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
           brew bottle --merge --write --no-commit bottles/*.json
