@@ -24,12 +24,16 @@ Codex -> 127.0.0.1 LiteLLM /v1/responses -> GitHub Copilot Chat API
 
 ## Install
 
-The formula currently tracks the repository's `main` branch:
+Install the stable release from the personal tap:
 
 ```bash
-brew install --HEAD Simo-C3/ccrelay/ccrelay
+brew install Simo-C3/ccrelay/ccrelay
 ccrelay doctor
 ```
+
+Apple Silicon macOS uses a prebuilt bottle hosted in this repository's GitHub
+Releases. `--HEAD` remains available for testing `main`, but builds LiteLLM from
+source and therefore requires Rust and takes substantially longer.
 
 The project pins LiteLLM exactly in `pyproject.toml` and `uv.lock`. Review
 dependency changes before upgrading it.

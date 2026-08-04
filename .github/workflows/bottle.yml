@@ -1,0 +1,120 @@
+name: Publish Homebrew bottle
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bottle-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  FORMULA: simo-c3/ccrelay/ccrelay
+  RELEASE_ROOT: https://github.com/Simo-C3/homebrew-ccrelay/releases/download
+
+jobs:
+  source:
+    runs-on: macos-15
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Build and publish source archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          command -v uv >/dev/null || brew install uv
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -1)"
+          test "$RELEASE_TAG" = "v$version"
+          uv build --sdist --quiet
+          archive="dist/ccrelay-$version.tar.gz"
+          actual="$(shasum -a 256 "$archive" | cut -d ' ' -f 1)"
+          expected="$(sed -n 's/^  sha256 "\([0-9a-f]*\)"/\1/p' Formula/ccrelay.rb | head -1)"
+          test "$actual" = "$expected"
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "ccrelay $version" \
+              --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" "$archive" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+  bottle:
+    needs: source
+    runs-on: macos-15
+    steps:
+      - name: Set up Homebrew tap
+        id: brew
+        uses: Homebrew/actions/setup-homebrew@fd832223f9f99ebf0244dd20658680e5d4aca049
+
+      - name: Check out release tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          git checkout --detach "$RELEASE_TAG"
+
+      - name: Build and test bottle
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          brew install --build-bottle "$FORMULA"
+          brew test "$FORMULA"
+          mkdir bottles
+          cd bottles
+          brew bottle \
+            --json \
+            --root-url="$RELEASE_ROOT/$RELEASE_TAG" \
+            "$FORMULA"
+
+      - name: Upload bottle artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bottle-arm64-sequoia
+          path: bottles
+          if-no-files-found: error
+
+  publish:
+    needs: bottle
+    runs-on: macos-15
+    steps:
+      - name: Set up Homebrew tap
+        id: brew
+        uses: Homebrew/actions/setup-homebrew@fd832223f9f99ebf0244dd20658680e5d4aca049
+
+      - name: Download bottle artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bottle-arm64-sequoia
+          path: bottles
+
+      - name: Publish bottle and update formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" bottles/*.bottle.tar.gz \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+          brew bottle --merge --write --no-commit bottles/*.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/ccrelay.rb
+          git commit -m "chore(homebrew): $RELEASE_TAG bottleを追加する"
+          git pull --rebase origin main
+          git push origin HEAD:main

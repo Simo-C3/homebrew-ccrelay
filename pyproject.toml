@@ -32,6 +32,14 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/ccrelay"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+  "README.md",
+  "pyproject.toml",
+  "src/ccrelay",
+  "uv.lock",
+]
+
 [tool.pytest.ini_options]
 addopts = "-q -m 'not integration'"
 testpaths = ["tests"]
