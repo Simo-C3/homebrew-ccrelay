@@ -8,8 +8,7 @@ class Ccrelay < Formula
 
   bottle do
     root_url "https://github.com/Simo-C3/homebrew-ccrelay/releases/download/v0.1.0"
-    rebuild 1
-    sha256 arm64_sequoia: "4970c6ca7c0e8ffb560ea483aa7f4ddef067980bb466fb59cfd2564a4cddad2a"
+    sha256 arm64_sequoia: "35df2e22cadcf714d91528650588152a68b91ab86534a65340aa1343a8ce6552"
   end
 
   depends_on "rust" => :build
