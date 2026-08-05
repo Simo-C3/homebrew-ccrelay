@@ -56,7 +56,9 @@ No model configuration is required. The model selected by Codex is forwarded
 unchanged to LiteLLM's GitHub Copilot provider. For example,
 `claude-sonnet-4.6` is routed as `github_copilot/claude-sonnet-4.6`.
 Availability is determined by the models enabled for the authenticated Copilot
-account.
+account. Codex's internal `codex-auto-review` model is routed to
+`github_copilot/gpt-5.6-sol` because Copilot does not expose that internal model
+ID.
 
 ## Run the proxy
 

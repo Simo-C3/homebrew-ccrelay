@@ -17,6 +17,11 @@ COPILOT_RESPONSES_ONLY_MODELS = (
     "mai-code-1-flash-picker",
 )
 
+# Codex uses this hidden model ID for automatic approval reviews. GitHub
+# Copilot does not expose it, so route reviews to a compatible reasoning model.
+CODEX_AUTO_REVIEW_MODEL = "codex-auto-review"
+COPILOT_AUTO_REVIEW_MODEL = "gpt-5.6-sol"
+
 
 def build_litellm_config(settings: RuntimeSettings) -> dict[str, Any]:
     return {
@@ -29,6 +34,13 @@ def build_litellm_config(settings: RuntimeSettings) -> dict[str, Any]:
                 }
                 for model in COPILOT_RESPONSES_ONLY_MODELS
             ],
+            {
+                "model_name": CODEX_AUTO_REVIEW_MODEL,
+                "model_info": {"mode": "responses"},
+                "litellm_params": {
+                    "model": f"github_copilot/{COPILOT_AUTO_REVIEW_MODEL}"
+                },
+            },
             {
                 "model_name": "*",
                 "model_info": {"mode": "responses"},

@@ -11,6 +11,8 @@ from litellm.router_utils.pattern_match_deployments import PatternMatchRouter
 from litellm.utils import _cached_get_model_info_helper
 
 from ccrelay.config import (
+    CODEX_AUTO_REVIEW_MODEL,
+    COPILOT_AUTO_REVIEW_MODEL,
     COPILOT_RESPONSES_ONLY_MODELS,
     build_litellm_config,
     write_litellm_config,
@@ -40,7 +42,7 @@ def test_litellm_config_routes_all_responses_models(tmp_path) -> None:
 
 def test_litellm_config_registers_responses_only_models_exactly(tmp_path) -> None:
     deployments = build_litellm_config(settings(tmp_path))["model_list"]
-    exact_deployments = deployments[:-1]
+    exact_deployments = deployments[: len(COPILOT_RESPONSES_ONLY_MODELS)]
     router = PatternMatchRouter()
     for deployment in deployments:
         router.add_pattern(deployment["model_name"], deployment)
@@ -57,6 +59,29 @@ def test_litellm_config_registers_responses_only_models_exactly(tmp_path) -> Non
         assert matched[0]["model_name"] == model
 
 
+def test_litellm_config_routes_codex_auto_review_to_supported_model(tmp_path) -> None:
+    deployments = build_litellm_config(settings(tmp_path))["model_list"]
+    router = PatternMatchRouter()
+    for deployment in deployments:
+        router.add_pattern(deployment["model_name"], deployment)
+
+    matched = router.route(CODEX_AUTO_REVIEW_MODEL)
+    assert matched is not None
+    assert matched[0]["model_name"] == CODEX_AUTO_REVIEW_MODEL
+    assert matched[0]["model_info"]["mode"] == "responses"
+    assert (
+        matched[0]["litellm_params"]["model"]
+        == f"github_copilot/{COPILOT_AUTO_REVIEW_MODEL}"
+    )
+
+    supported_params = litellm.get_supported_openai_params(
+        model=COPILOT_AUTO_REVIEW_MODEL,
+        custom_llm_provider="github_copilot",
+    )
+    assert supported_params is not None
+    assert "reasoning_effort" in supported_params
+
+
 def test_litellm_wildcard_preserves_requested_model(tmp_path) -> None:
     deployment = build_litellm_config(settings(tmp_path))["model_list"][-1]
     router = PatternMatchRouter()
@@ -69,7 +94,9 @@ def test_litellm_wildcard_preserves_requested_model(tmp_path) -> None:
 
 
 def test_exact_registration_enables_native_copilot_responses(tmp_path) -> None:
-    deployments = build_litellm_config(settings(tmp_path))["model_list"][:-1]
+    deployments = build_litellm_config(settings(tmp_path))["model_list"][
+        : len(COPILOT_RESPONSES_ONLY_MODELS)
+    ]
     model_cost = dict(litellm.model_cost)
     for deployment in deployments:
         model_cost[deployment["litellm_params"]["model"]] = deployment["model_info"]
