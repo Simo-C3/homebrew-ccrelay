@@ -140,7 +140,7 @@ def service_start(
 ) -> None:
     """Start in the background and register the proxy to run at login."""
     _configure_service(port)
-    _run_service_action("restart", wait=True)
+    _run_service_action("start", wait=True)
 
 
 @service_app.command("stop")

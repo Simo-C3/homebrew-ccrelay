@@ -10,16 +10,18 @@ import threading
 import time
 from pathlib import Path
 from types import FrameType
+from typing import TYPE_CHECKING
 
 import httpx
-from litellm.llms.github_copilot.authenticator import Authenticator
-from litellm.llms.github_copilot.common_utils import GetAPIKeyError
 
 from ccrelay.config import build_proxy_environment, write_litellm_config
 from ccrelay.settings import (
     RuntimeSettings,
     copilot_token_directory,
 )
+
+if TYPE_CHECKING:
+    from litellm.llms.github_copilot.authenticator import Authenticator
 
 SECRET_PATTERNS = [
     re.compile(r"(?i)(authorization[\"':=\s]+bearer\s+)[^\s\"']+"),
@@ -34,12 +36,20 @@ class CopilotAuthenticationError(RuntimeError):
     pass
 
 
+def _copilot_authenticator() -> Authenticator:
+    from litellm.llms.github_copilot.authenticator import Authenticator
+
+    return Authenticator()
+
+
 def authenticate_copilot() -> None:
+    from litellm.llms.github_copilot.common_utils import GetAPIKeyError
+
     variable = "GITHUB_COPILOT_TOKEN_DIR"
     previous = os.environ.get(variable)
     os.environ[variable] = str(copilot_token_directory())
     try:
-        Authenticator().get_api_key()
+        _copilot_authenticator().get_api_key()
     except GetAPIKeyError as exc:
         raise CopilotAuthenticationError(str(exc)) from exc
     finally:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from types import SimpleNamespace
 
 from typer.testing import CliRunner
@@ -30,7 +32,22 @@ def test_doctor_fails_when_litellm_is_missing(monkeypatch) -> None:
     assert "[WARN] LiteLLM: missing" in result.stdout
 
 
-def test_service_start_restarts_to_apply_configuration(monkeypatch, tmp_path) -> None:
+def test_cli_import_does_not_eagerly_import_litellm() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import ccrelay.cli; assert 'litellm' not in sys.modules",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_service_start_does_not_restart_running_service(monkeypatch, tmp_path) -> None:
     runtime = RuntimeSettings(
         port=4141,
         proxy_key="sk-ccrelay-test",
@@ -53,4 +70,4 @@ def test_service_start_restarts_to_apply_configuration(monkeypatch, tmp_path) ->
     result = runner.invoke(app, ["service", "start"])
 
     assert result.exit_code == 0
-    assert actions == ["restart"]
+    assert actions == ["start"]

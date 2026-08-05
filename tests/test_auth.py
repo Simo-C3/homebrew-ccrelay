@@ -15,7 +15,7 @@ def test_authenticate_copilot_uses_private_token_directory(monkeypatch, tmp_path
 
     monkeypatch.setenv("CCRELAY_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", "/previous")
-    monkeypatch.setattr("ccrelay.runtime.Authenticator", FakeAuthenticator)
+    monkeypatch.setattr("ccrelay.runtime._copilot_authenticator", FakeAuthenticator)
 
     authenticate_copilot()
 
