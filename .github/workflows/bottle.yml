@@ -59,6 +59,8 @@ jobs:
       - name: Set up Homebrew tap
         id: brew
         uses: Homebrew/actions/setup-homebrew@fd832223f9f99ebf0244dd20658680e5d4aca049
+        with:
+          token: ${{ github.token }}
 
       - name: Check out release tag
         env:
@@ -78,6 +80,7 @@ jobs:
           cd bottles
           brew bottle \
             --json \
+            --no-rebuild \
             --root-url="$RELEASE_ROOT/$RELEASE_TAG" \
             "$FORMULA"
           for bottle in *.bottle*.tar.gz; do
@@ -98,6 +101,8 @@ jobs:
       - name: Set up Homebrew tap
         id: brew
         uses: Homebrew/actions/setup-homebrew@fd832223f9f99ebf0244dd20658680e5d4aca049
+        with:
+          token: ${{ github.token }}
 
       - name: Download bottle artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
