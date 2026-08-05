@@ -6,10 +6,29 @@ from typing import Any
 
 from ccrelay.settings import RuntimeSettings
 
+# LiteLLM's Copilot Responses gate looks up concrete provider/model keys. A
+# wildcard deployment alone does not register those keys and falls back to chat.
+COPILOT_RESPONSES_ONLY_MODELS = (
+    "gpt-5.3-codex",
+    "gpt-5.5",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "mai-code-1-flash-picker",
+)
+
 
 def build_litellm_config(settings: RuntimeSettings) -> dict[str, Any]:
     return {
         "model_list": [
+            *[
+                {
+                    "model_name": model,
+                    "model_info": {"mode": "responses"},
+                    "litellm_params": {"model": f"github_copilot/{model}"},
+                }
+                for model in COPILOT_RESPONSES_ONLY_MODELS
+            ],
             {
                 "model_name": "*",
                 "model_info": {"mode": "responses"},
