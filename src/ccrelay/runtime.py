@@ -92,9 +92,16 @@ def litellm_command() -> list[str]:
 
 
 class ProxyProcess:
-    def __init__(self, settings: RuntimeSettings, *, show_logs: bool = False) -> None:
+    def __init__(
+        self,
+        settings: RuntimeSettings,
+        *,
+        show_logs: bool = False,
+        log_level: str | None = None,
+    ) -> None:
         self.settings = settings
         self.show_logs = show_logs
+        self.log_level = log_level
         self.process: subprocess.Popen[str] | None = None
         self._log_file: object | None = None
         self._pump_thread: threading.Thread | None = None
@@ -110,10 +117,12 @@ class ProxyProcess:
             "--port",
             str(self.settings.port),
         ]
+        self.settings.log_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._log_file = self.settings.log_path.open("w", encoding="utf-8")
+        self.settings.log_path.chmod(0o600)
         self.process = subprocess.Popen(
             command,
-            env=build_proxy_environment(self.settings),
+            env=build_proxy_environment(self.settings, log_level=self.log_level),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -193,8 +202,14 @@ class ProxyProcess:
             self._log_file = None
 
 
-def run_proxy_until_stopped(settings: RuntimeSettings, *, show_logs: bool = False) -> None:
-    proxy = ProxyProcess(settings, show_logs=show_logs)
+def run_proxy_until_stopped(
+    settings: RuntimeSettings,
+    *,
+    show_logs: bool = False,
+    startup_timeout: float = 90.0,
+    log_level: str | None = None,
+) -> None:
+    proxy = ProxyProcess(settings, show_logs=show_logs, log_level=log_level)
     stop_requested = threading.Event()
     old_sigint = signal.getsignal(signal.SIGINT)
     old_sigterm = signal.getsignal(signal.SIGTERM)
@@ -205,7 +220,7 @@ def run_proxy_until_stopped(settings: RuntimeSettings, *, show_logs: bool = Fals
     signal.signal(signal.SIGINT, request_stop)
     signal.signal(signal.SIGTERM, request_stop)
     try:
-        proxy.start()
+        proxy.start(timeout=startup_timeout)
         while not stop_requested.wait(0.5):
             process = proxy.process
             if process is not None and process.poll() is not None:

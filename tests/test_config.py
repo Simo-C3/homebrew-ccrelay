@@ -15,6 +15,7 @@ from ccrelay.config import (
     COPILOT_AUTO_REVIEW_MODEL,
     COPILOT_RESPONSES_ONLY_MODELS,
     build_litellm_config,
+    build_proxy_environment,
     write_litellm_config,
 )
 from ccrelay.settings import RuntimeSettings
@@ -117,3 +118,11 @@ def test_written_config_is_private_json_yaml(tmp_path) -> None:
     write_litellm_config(runtime)
     assert json.loads(runtime.config_path.read_text())["model_list"]
     assert runtime.config_path.stat().st_mode & 0o077 == 0
+
+
+def test_proxy_environment_accepts_explicit_log_level(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("LITELLM_LOG", "INFO")
+
+    environment = build_proxy_environment(settings(tmp_path), log_level="debug")
+
+    assert environment["LITELLM_LOG"] == "DEBUG"

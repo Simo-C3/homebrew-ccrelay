@@ -29,7 +29,10 @@ Install the stable release from the personal tap:
 ```bash
 brew install Simo-C3/ccrelay/ccrelay
 ccrelay doctor
+ccrelay --version
 ```
+
+`ccrelay -V` and the existing `ccrelay version` command print the same version.
 
 Apple Silicon macOS uses a prebuilt bottle hosted in this repository's GitHub
 Releases. `--HEAD` remains available for testing `main`, but builds LiteLLM from
@@ -65,7 +68,15 @@ ID.
 Run in the foreground:
 
 ```bash
-ccrelay proxy
+ccrelay proxy run
+```
+
+The existing `ccrelay proxy` form remains supported. Foreground startup and
+logging can be adjusted when troubleshooting:
+
+```bash
+ccrelay proxy run --startup-timeout 120 --log-level info --verbose
+ccrelay proxy run --log-file ./ccrelay.log
 ```
 
 Run in the background for the current login session:
@@ -86,10 +97,18 @@ can reconnect after a restart.
 
 ```bash
 ccrelay service status
+ccrelay service status --json
 ccrelay service restart
 ccrelay service restart --port 4142
+ccrelay service restart --timeout 120
 ccrelay service stop
+ccrelay service logs --lines 200
+ccrelay service logs --follow
 ```
+
+`service start`, `run`, and `restart` wait for a healthy proxy by default. Use
+`--no-wait` to return immediately. `service status --quiet` suppresses output
+and reports health through its exit status.
 
 Changing the port of a running service requires `service restart`. If the Codex
 App integration is enabled, the managed URL is updated at the same time;
@@ -101,7 +120,12 @@ shell syntax:
 ```bash
 eval "$(ccrelay proxy setenv)"
 ccrelay proxy setenv --shell fish
+ccrelay proxy setenv --json
 ```
+
+Shell syntax is detected automatically from `SHELL`; it can be overridden with
+`--shell auto|bash|zsh|fish`. The JSON form contains the local proxy key and
+should be handled as sensitive output.
 
 ## Use Codex App
 
@@ -112,10 +136,18 @@ ccrelay service start
 ccrelay codex-app enable
 ```
 
+Preview the configuration change without writing any files:
+
+```bash
+ccrelay codex-app enable --dry-run
+ccrelay codex-app disable --dry-run
+```
+
 Restart Codex App after switching. Check the current selection with:
 
 ```bash
 ccrelay codex-app status
+ccrelay codex-app status --json
 ```
 
 Switch back to the provider that was selected before `ccrelay`:
@@ -147,8 +179,15 @@ Useful commands:
 
 ```bash
 ccrelay doctor
+ccrelay doctor --json
+ccrelay doctor --strict
+ccrelay doctor --online --timeout 10
 ccrelay version
 ```
+
+`doctor --online` only checks GitHub connectivity. It does not authenticate or
+send a model request. `--strict` makes every warning produce a non-zero exit
+status, which is useful in automated checks.
 
 Set `CCRELAY_LITELLM_BIN` or `CCRELAY_BREW_BIN` to override binary locations.
 `CCRELAY_STATE_DIR`, `CCRELAY_CACHE_DIR`, and `CODEX_HOME` override state,

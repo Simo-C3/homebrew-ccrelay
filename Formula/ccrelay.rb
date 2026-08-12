@@ -38,6 +38,6 @@ class Ccrelay < Formula
   end
 
   test do
-    assert_match "ccrelay", shell_output("#{bin}/ccrelay version")
+    assert_match "ccrelay", shell_output("#{bin}/ccrelay --version")
   end
 end

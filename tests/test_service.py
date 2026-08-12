@@ -24,6 +24,19 @@ def test_service_settings_are_persistent_and_private(monkeypatch, tmp_path) -> N
     assert stat.S_IMODE(settings_path.stat().st_mode) == 0o600
 
 
+def test_service_settings_can_be_loaded_without_persisting(monkeypatch, tmp_path) -> None:
+    state_dir = tmp_path / "state"
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setenv("CCRELAY_STATE_DIR", str(state_dir))
+    monkeypatch.setenv("CCRELAY_CACHE_DIR", str(cache_dir))
+
+    settings = load_service_settings(persist=False)
+
+    assert settings.port == 4141
+    assert not state_dir.exists()
+    assert not cache_dir.exists()
+
+
 def test_invalid_saved_service_settings_fail(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("CCRELAY_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setenv("CCRELAY_CACHE_DIR", str(tmp_path / "cache"))

@@ -11,7 +11,12 @@ from typing import Any
 from tomlkit import TOMLDocument, dumps, parse, table
 from tomlkit.items import Table
 
-from ccrelay.settings import PROVIDER_ID, RuntimeSettings, service_state_directory
+from ccrelay.settings import (
+    PROVIDER_ID,
+    RuntimeSettings,
+    service_state_directory,
+    service_state_directory_path,
+)
 from ccrelay.storage import write_private_json, write_private_text
 
 BACKUP_VERSION = 3
@@ -27,6 +32,33 @@ class CodexAppStatus:
     preserved_changes: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class CodexAppPreview:
+    config_path: Path
+    action: str
+    target_mode: int | None
+    base_url: str | None = None
+    preserved_changes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _EnablePlan:
+    config_path: Path
+    backup_path: Path
+    backup: dict[str, Any]
+    content: str
+
+
+@dataclass(frozen=True)
+class _DisablePlan:
+    config_path: Path
+    backup_path: Path
+    content: str | None
+    target_mode: int | None
+    remove_config: bool
+    preserved_changes: tuple[str, ...]
+
+
 def codex_config_path() -> Path:
     codex_home = os.environ.get("CODEX_HOME")
     root = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
@@ -34,8 +66,29 @@ def codex_config_path() -> Path:
 
 
 def enable_codex_app(settings: RuntimeSettings) -> CodexAppStatus:
+    plan = _plan_enable_codex_app(settings, create_parent=True)
+    write_private_json(plan.backup_path, plan.backup)
+    write_private_text(plan.config_path, plan.content)
+    return get_codex_app_status()
+
+
+def preview_enable_codex_app(settings: RuntimeSettings) -> CodexAppPreview:
+    plan = _plan_enable_codex_app(settings, create_parent=False)
+    return CodexAppPreview(
+        config_path=plan.config_path,
+        action="update" if plan.config_path.exists() else "create",
+        target_mode=0o600,
+        base_url=f"{settings.base_url}/v1",
+    )
+
+
+def _plan_enable_codex_app(
+    settings: RuntimeSettings,
+    *,
+    create_parent: bool,
+) -> _EnablePlan:
     config_path = codex_config_path()
-    backup_path = _backup_path()
+    backup_path = _backup_path(create_parent=create_parent)
     document = _read_document(config_path)
     providers = _providers(document, create=True)
     assert providers is not None
@@ -92,22 +145,57 @@ def enable_codex_app(settings: RuntimeSettings) -> CodexAppStatus:
         "config_mode": 0o600,
         "trailing_newlines": _count_trailing_newlines(content),
     }
-    write_private_json(backup_path, backup)
-    write_private_text(config_path, content)
-    return get_codex_app_status()
+    return _EnablePlan(
+        config_path=config_path,
+        backup_path=backup_path,
+        backup=backup,
+        content=content,
+    )
 
 
 def disable_codex_app() -> CodexAppStatus:
+    plan = _plan_disable_codex_app(create_parent=True)
+    if plan.remove_config:
+        plan.config_path.unlink(missing_ok=True)
+    elif plan.content is not None and plan.target_mode is not None:
+        write_private_text(plan.config_path, plan.content, mode=plan.target_mode)
+    plan.backup_path.unlink()
+    return replace(
+        get_codex_app_status(),
+        preserved_changes=plan.preserved_changes,
+    )
+
+
+def preview_disable_codex_app() -> CodexAppPreview:
+    plan = _plan_disable_codex_app(create_parent=False)
+    if plan.remove_config:
+        action = "remove"
+    elif plan.content is None:
+        action = "preserve removal"
+    else:
+        action = "update"
+    return CodexAppPreview(
+        config_path=plan.config_path,
+        action=action,
+        target_mode=plan.target_mode,
+        preserved_changes=plan.preserved_changes,
+    )
+
+
+def _plan_disable_codex_app(*, create_parent: bool) -> _DisablePlan:
     config_path = codex_config_path()
-    backup_path = _backup_path()
+    backup_path = _backup_path(create_parent=create_parent)
     if not backup_path.exists():
         raise RuntimeError("ccrelay is not enabled in the Codex configuration")
 
     backup = _read_backup(backup_path, config_path)
     if not config_path.exists():
-        backup_path.unlink()
-        return replace(
-            get_codex_app_status(),
+        return _DisablePlan(
+            config_path=config_path,
+            backup_path=backup_path,
+            content=None,
+            target_mode=None,
+            remove_config=False,
             preserved_changes=("config file removal",),
         )
 
@@ -175,13 +263,13 @@ def disable_codex_app() -> CodexAppStatus:
 
     serialized = dumps(document)
     content = serialized.rstrip("\n") + ("\n" * target_trailing_newlines)
-    if not backup["config_existed"] and not content and not preserved:
-        config_path.unlink(missing_ok=True)
-    else:
-        write_private_text(config_path, content, mode=target_mode)
-    backup_path.unlink()
-    return replace(
-        get_codex_app_status(),
+    remove_config = not backup["config_existed"] and not content and not preserved
+    return _DisablePlan(
+        config_path=config_path,
+        backup_path=backup_path,
+        content=content,
+        target_mode=target_mode,
+        remove_config=remove_config,
         preserved_changes=tuple(preserved),
     )
 
@@ -293,8 +381,9 @@ def _restore_value(document: TOMLDocument, name: str, snapshot: object) -> None:
         del document[name]
 
 
-def _backup_path() -> Path:
-    return service_state_directory() / "codex-app-backup.json"
+def _backup_path(*, create_parent: bool) -> Path:
+    directory = service_state_directory() if create_parent else service_state_directory_path()
+    return directory / "codex-app-backup.json"
 
 
 def _read_backup(path: Path, config_path: Path) -> dict[str, Any]:

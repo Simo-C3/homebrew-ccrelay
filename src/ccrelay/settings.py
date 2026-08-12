@@ -22,30 +22,48 @@ def ensure_private_directory(path: Path) -> Path:
     return path
 
 
-def state_directory() -> Path:
+def state_directory_path() -> Path:
+    """Return the state directory path without creating it."""
     override = os.environ.get("CCRELAY_STATE_DIR")
-    return ensure_private_directory(
-        Path(override).expanduser() if override else user_state_path("ccrelay")
-    )
+    return Path(override).expanduser() if override else user_state_path("ccrelay")
+
+
+def state_directory() -> Path:
+    return ensure_private_directory(state_directory_path())
+
+
+def cache_directory_path() -> Path:
+    """Return the cache directory path without creating it."""
+    override = os.environ.get("CCRELAY_CACHE_DIR")
+    return Path(override).expanduser() if override else user_cache_path("ccrelay")
 
 
 def cache_directory() -> Path:
-    override = os.environ.get("CCRELAY_CACHE_DIR")
-    return ensure_private_directory(
-        Path(override).expanduser() if override else user_cache_path("ccrelay")
-    )
+    return ensure_private_directory(cache_directory_path())
+
+
+def copilot_token_directory_path() -> Path:
+    return state_directory_path() / "github-copilot"
 
 
 def copilot_token_directory() -> Path:
-    return ensure_private_directory(state_directory() / "github-copilot")
+    return ensure_private_directory(copilot_token_directory_path())
+
+
+def service_state_directory_path() -> Path:
+    return state_directory_path() / "service"
 
 
 def service_state_directory() -> Path:
-    return ensure_private_directory(state_directory() / "service")
+    return ensure_private_directory(service_state_directory_path())
+
+
+def service_cache_directory_path() -> Path:
+    return cache_directory_path() / "service"
 
 
 def service_cache_directory() -> Path:
-    return ensure_private_directory(cache_directory() / "service")
+    return ensure_private_directory(service_cache_directory_path())
 
 
 @dataclass(frozen=True)

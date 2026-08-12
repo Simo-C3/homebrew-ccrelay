@@ -68,9 +68,16 @@ def proxy_key_environment_name() -> str:
     return "CCRELAY_PROXY_KEY"
 
 
-def build_proxy_environment(settings: RuntimeSettings) -> dict[str, str]:
+def build_proxy_environment(
+    settings: RuntimeSettings,
+    *,
+    log_level: str | None = None,
+) -> dict[str, str]:
     env = os.environ.copy()
     env[proxy_key_environment_name()] = settings.proxy_key
     env["GITHUB_COPILOT_TOKEN_DIR"] = str(settings.token_directory)
-    env.setdefault("LITELLM_LOG", "ERROR")
+    if log_level is None:
+        env.setdefault("LITELLM_LOG", "ERROR")
+    else:
+        env["LITELLM_LOG"] = log_level.upper()
     return env

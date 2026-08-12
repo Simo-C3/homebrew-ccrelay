@@ -14,9 +14,12 @@ from ccrelay.settings import (
     DEFAULT_PROXY_PORT,
     RuntimeSettings,
     copilot_token_directory,
+    copilot_token_directory_path,
     make_proxy_key,
     service_cache_directory,
+    service_cache_directory_path,
     service_state_directory,
+    service_state_directory_path,
 )
 from ccrelay.storage import write_private_json
 
@@ -27,9 +30,10 @@ BREW_SERVICE_ACTIONS = {"run", "start", "stop", "restart"}
 def load_service_settings(
     *,
     port: int | None = None,
+    persist: bool = True,
 ) -> RuntimeSettings:
-    state_dir = service_state_directory()
-    cache_dir = service_cache_directory()
+    state_dir = service_state_directory() if persist else service_state_directory_path()
+    cache_dir = service_cache_directory() if persist else service_cache_directory_path()
     settings_path = state_dir / "settings.json"
 
     if settings_path.exists():
@@ -45,7 +49,9 @@ def load_service_settings(
     if not 1 <= selected_port <= 65535:
         raise ValueError("Proxy port must be between 1 and 65535")
 
-    if payload.get("version") != SERVICE_SETTINGS_VERSION or selected_port != saved_port:
+    if persist and (
+        payload.get("version") != SERVICE_SETTINGS_VERSION or selected_port != saved_port
+    ):
         write_private_json(
             settings_path,
             {
@@ -57,7 +63,7 @@ def load_service_settings(
     return RuntimeSettings(
         port=selected_port,
         proxy_key=proxy_key,
-        token_directory=copilot_token_directory(),
+        token_directory=(copilot_token_directory() if persist else copilot_token_directory_path()),
         config_path=state_dir / "litellm.json",
         log_path=cache_dir / "proxy.log",
     )

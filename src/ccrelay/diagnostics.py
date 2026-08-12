@@ -5,6 +5,8 @@ import os
 import platform
 from dataclasses import dataclass
 
+import httpx
+
 from ccrelay.settings import copilot_token_directory
 
 
@@ -44,3 +46,18 @@ def collect_checks() -> list[Check]:
         )
     )
     return checks
+
+
+def collect_online_checks(*, timeout: float) -> list[Check]:
+    """Check network reachability without authenticating or sending a model request."""
+    try:
+        response = httpx.get(
+            "https://github.com/login/device",
+            follow_redirects=True,
+            timeout=timeout,
+        )
+    except httpx.HTTPError as exc:
+        return [Check("GitHub device endpoint", False, str(exc))]
+    ok = response.status_code < 500
+    detail = f"HTTP {response.status_code}"
+    return [Check("GitHub device endpoint", ok, detail)]

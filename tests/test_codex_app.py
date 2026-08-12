@@ -6,7 +6,13 @@ import stat
 import pytest
 from tomlkit import parse
 
-from ccrelay.codex_app import disable_codex_app, enable_codex_app, get_codex_app_status
+from ccrelay.codex_app import (
+    disable_codex_app,
+    enable_codex_app,
+    get_codex_app_status,
+    preview_disable_codex_app,
+    preview_enable_codex_app,
+)
 from ccrelay.settings import RuntimeSettings
 
 
@@ -47,6 +53,42 @@ def test_enable_and_disable_restore_codex_config(monkeypatch, tmp_path) -> None:
     assert not disabled.enabled
     assert config_path.read_text() == original
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o644
+
+
+def test_enable_preview_does_not_change_config_or_create_backup(monkeypatch, tmp_path) -> None:
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    config_path = codex_home / "config.toml"
+    original = 'model_provider = "openai"\n'
+    config_path.write_text(original)
+    state_dir = tmp_path / "state"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("CCRELAY_STATE_DIR", str(state_dir))
+
+    preview = preview_enable_codex_app(settings(tmp_path))
+
+    assert preview.action == "update"
+    assert preview.base_url == "http://127.0.0.1:4141/v1"
+    assert config_path.read_text() == original
+    assert not state_dir.exists()
+
+
+def test_disable_preview_does_not_change_config_or_backup(monkeypatch, tmp_path) -> None:
+    codex_home = tmp_path / "codex"
+    state_dir = tmp_path / "state"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("CCRELAY_STATE_DIR", str(state_dir))
+    enable_codex_app(settings(tmp_path))
+    config_path = codex_home / "config.toml"
+    backup_path = state_dir / "service" / "codex-app-backup.json"
+    before_config = config_path.read_text()
+    before_backup = backup_path.read_text()
+
+    preview = preview_disable_codex_app()
+
+    assert preview.action == "remove"
+    assert config_path.read_text() == before_config
+    assert backup_path.read_text() == before_backup
 
 
 def test_disable_preserves_unrelated_changes(monkeypatch, tmp_path) -> None:
