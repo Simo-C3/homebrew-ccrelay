@@ -6,6 +6,11 @@ class Ccrelay < Formula
   license "MIT"
   head "https://github.com/Simo-C3/homebrew-ccrelay.git", branch: "main"
 
+  bottle do
+    root_url "https://github.com/Simo-C3/homebrew-ccrelay/releases/download/v0.3.0"
+    sha256 arm64_sequoia: "333ff494736127ca3a4ad94f2ed509e092ed5f082f23912420ef40c82c1163e5"
+  end
+
   depends_on "rust" => :build
   depends_on "uv" => :build
   depends_on "python@3.14"
