@@ -219,3 +219,8 @@ uv run ruff check .
 uv run mypy
 uv run pytest --cov=ccrelay
 ```
+
+## Documentation
+
+See the [documentation index](docs/README.md) for the getting-started guide,
+command reference, troubleshooting, and release procedures.
