@@ -8,9 +8,10 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from tomlkit import TOMLDocument, dumps, parse, table
+from tomlkit import TOMLDocument, dumps, inline_table, parse, table
 from tomlkit.items import Table
 
+from ccrelay.gateway import LOCAL_KEY_HEADER
 from ccrelay.settings import (
     PROVIDER_ID,
     RuntimeSettings,
@@ -217,12 +218,10 @@ def _plan_disable_codex_app(*, create_parent: bool) -> _DisablePlan:
             if not providers:
                 del document["model_providers"]
         elif isinstance(provider, Table):
-            token = provider.get("experimental_bearer_token")
-            if (
-                isinstance(token, str)
-                and _text_fingerprint(token) == backup["applied"]["token_fingerprint"]
-            ):
-                del provider["experimental_bearer_token"]
+            _remove_managed_local_key(
+                provider,
+                expected_fingerprint=backup["applied"]["token_fingerprint"],
+            )
             preserved.append(f"model_providers.{PROVIDER_ID}")
         elif provider is not None:
             preserved.append(f"model_providers.{PROVIDER_ID}")
@@ -249,15 +248,15 @@ def _plan_disable_codex_app(*, create_parent: bool) -> _DisablePlan:
         target_mode = current_mode
         target_trailing_newlines = current_trailing_newlines
 
-    provider_has_token = (
+    provider_has_local_key = (
         isinstance(provider, Table)
         and providers is not None
         and PROVIDER_ID in providers
-        and "experimental_bearer_token" in provider
+        and _provider_has_local_key(provider)
     )
-    if provider_has_token and target_mode & 0o077:
+    if provider_has_local_key and target_mode & 0o077:
         target_mode = 0o600
-        preserved.append("file permissions (restricted to protect the preserved token)")
+        preserved.append("file permissions (restricted to protect the preserved local key)")
     elif backup["version"] == BACKUP_VERSION and permissions_changed:
         preserved.append("file permissions")
 
@@ -294,19 +293,56 @@ def _provider_table(settings: RuntimeSettings) -> Table:
     provider = table()
     provider["name"] = PROVIDER_NAME
     provider["base_url"] = f"{settings.base_url}/v1"
-    provider["experimental_bearer_token"] = settings.proxy_key
     provider["wire_api"] = "responses"
+    provider["requires_openai_auth"] = True
+    provider["supports_websockets"] = False
+    headers = inline_table()
+    headers[LOCAL_KEY_HEADER] = settings.proxy_key
+    provider["http_headers"] = headers
     provider["stream_idle_timeout_ms"] = 300000
     return provider
 
 
 def _provider_looks_managed(provider: Table) -> bool:
+    legacy_bearer = provider.get("experimental_bearer_token")
+    local_header = _provider_local_header(provider)
     return (
         provider.get("name") == PROVIDER_NAME
         and provider.get("wire_api") == "responses"
         and isinstance(provider.get("base_url"), str)
-        and isinstance(provider.get("experimental_bearer_token"), str)
+        and (
+            isinstance(legacy_bearer, str)
+            or (provider.get("requires_openai_auth") is True and isinstance(local_header, str))
+        )
     )
+
+
+def _provider_local_header(provider: Table) -> object:
+    headers = provider.get("http_headers")
+    if not isinstance(headers, dict):
+        return None
+    return headers.get(LOCAL_KEY_HEADER)
+
+
+def _provider_has_local_key(provider: Table) -> bool:
+    return isinstance(provider.get("experimental_bearer_token"), str) or isinstance(
+        _provider_local_header(provider), str
+    )
+
+
+def _remove_managed_local_key(provider: Table, *, expected_fingerprint: str) -> None:
+    legacy_bearer = provider.get("experimental_bearer_token")
+    if isinstance(legacy_bearer, str) and _text_fingerprint(legacy_bearer) == expected_fingerprint:
+        del provider["experimental_bearer_token"]
+
+    headers = provider.get("http_headers")
+    if not isinstance(headers, dict):
+        return
+    local_header = headers.get(LOCAL_KEY_HEADER)
+    if isinstance(local_header, str) and _text_fingerprint(local_header) == expected_fingerprint:
+        del headers[LOCAL_KEY_HEADER]
+        if not headers:
+            del provider["http_headers"]
 
 
 def _provider_fingerprint(provider: Table) -> str:

@@ -54,6 +54,30 @@ ccrelay codex-app disable --dry-run
 ccrelay codex-app disable
 ```
 
+ccrelay を更新した直後であれば、管理設定を再適用してから Codex App を再起動します。
+
+```bash
+ccrelay codex-app enable
+```
+
+これにより、旧版の `experimental_bearer_token` を使う未変更の設定も新しい
+`X-CCRelay-Key` 形式へ移行されます。
+
+## 組み込み imagegen が表示されない、または認証エラーになる
+
+`imagegen` は GitHub Copilot ではなく、Codex でログイン中の ChatGPT 画像バックエンドを
+使います。`OPENAI_API_KEY` は不要です。次を確認してください。
+
+- Codex が ChatGPT アカウントでログイン済みである
+- ChatGPT Free プランではない（Codex 側で Free プランの画像生成は無効になります）
+- Codex で画像入力に対応するモデルを選択している
+- `ccrelay codex-app enable` の実行後に Codex を完全に再起動した
+- 手動設定では `requires_openai_auth = true` と `X-CCRelay-Key` を設定した
+
+`ChatGPT authentication is required for imagegen` と表示される場合は、ローカルキーまたは
+Codex の ChatGPT 認証が画像リクエストに付いていません。管理設定を再適用して Codex へ
+再ログインし、Codex を再起動してください。
+
 ## 詳細ログを確認したい
 
 前景起動ではログレベルと出力先を指定できます。

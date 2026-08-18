@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from ccrelay.config import build_proxy_environment, write_litellm_config
+from ccrelay.gateway import RelayGateway, available_loopback_port
 from ccrelay.settings import (
     RuntimeSettings,
     copilot_token_directory,
@@ -103,11 +104,14 @@ class ProxyProcess:
         self.show_logs = show_logs
         self.log_level = log_level
         self.process: subprocess.Popen[str] | None = None
+        self.gateway: RelayGateway | None = None
         self._log_file: object | None = None
         self._pump_thread: threading.Thread | None = None
 
     def start(self, timeout: float = 90.0) -> None:
         write_litellm_config(self.settings)
+        backend_port = available_loopback_port()
+        backend_base_url = f"http://127.0.0.1:{backend_port}"
         command = [
             *litellm_command(),
             "--config",
@@ -115,23 +119,39 @@ class ProxyProcess:
             "--host",
             "127.0.0.1",
             "--port",
-            str(self.settings.port),
+            str(backend_port),
         ]
         self.settings.log_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._log_file = self.settings.log_path.open("w", encoding="utf-8")
         self.settings.log_path.chmod(0o600)
-        self.process = subprocess.Popen(
-            command,
-            env=build_proxy_environment(self.settings, log_level=self.log_level),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            start_new_session=True,
-        )
-        self._pump_thread = threading.Thread(target=self._pump_logs, daemon=True)
-        self._pump_thread.start()
-        self._wait_until_ready(timeout)
+        try:
+            self.process = subprocess.Popen(
+                command,
+                env=build_proxy_environment(self.settings, log_level=self.log_level),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                start_new_session=True,
+            )
+            self._pump_thread = threading.Thread(target=self._pump_logs, daemon=True)
+            self._pump_thread.start()
+            self._wait_until_ready(backend_base_url, timeout, component="LiteLLM")
+            self.gateway = RelayGateway(
+                port=self.settings.port,
+                backend_base_url=backend_base_url,
+                proxy_key=self.settings.proxy_key,
+            )
+            self.gateway.start()
+            self._wait_until_ready(
+                self.settings.base_url,
+                min(timeout, 5.0),
+                component="ccrelay gateway",
+                require_gateway=True,
+            )
+        except BaseException:
+            self.stop()
+            raise
 
     def _pump_logs(self) -> None:
         if self.process is None or self.process.stdout is None or self._log_file is None:
@@ -145,9 +165,16 @@ class ProxyProcess:
             elif is_auth_instruction(safe_line):
                 print(f"[proxy-auth] {safe_line}", end="", file=sys.stderr)
 
-    def _wait_until_ready(self, timeout: float) -> None:
+    def _wait_until_ready(
+        self,
+        base_url: str,
+        timeout: float,
+        *,
+        component: str,
+        require_gateway: bool = False,
+    ) -> None:
         deadline = time.monotonic() + timeout
-        url = f"{self.settings.base_url}/health/liveliness"
+        url = f"{base_url}/health/liveliness"
         headers = {"Authorization": f"Bearer {self.settings.proxy_key}"}
         last_error = "not ready"
         while time.monotonic() < deadline:
@@ -156,6 +183,8 @@ class ProxyProcess:
                     f"LiteLLM exited with status {self.process.returncode}; "
                     f"see {self.settings.log_path}"
                 )
+            if require_gateway and (self.gateway is None or not self.gateway.is_alive()):
+                raise RuntimeError("ccrelay gateway exited during startup")
             try:
                 response = httpx.get(url, headers=headers, timeout=0.5)
                 if response.status_code == 200:
@@ -167,7 +196,7 @@ class ProxyProcess:
         log_tail = self._read_log_tail()
         detail = f"\nLast redacted proxy log lines:\n{log_tail}" if log_tail else ""
         raise RuntimeError(
-            f"LiteLLM did not become ready within {timeout:.0f}s ({last_error}).{detail}"
+            f"{component} did not become ready within {timeout:.0f}s ({last_error}).{detail}"
         )
 
     def _read_log_tail(self, lines: int = 30) -> str:
@@ -180,6 +209,10 @@ class ProxyProcess:
         return "\n".join(content.splitlines()[-lines:])
 
     def stop(self) -> None:
+        gateway = self.gateway
+        self.gateway = None
+        if gateway is not None:
+            gateway.stop()
         process = self.process
         if process is None or process.poll() is not None:
             self._close_log()
@@ -225,6 +258,9 @@ def run_proxy_until_stopped(
             process = proxy.process
             if process is not None and process.poll() is not None:
                 raise RuntimeError(f"LiteLLM exited with status {process.returncode}")
+            gateway = proxy.gateway
+            if gateway is None or not gateway.is_alive():
+                raise RuntimeError("ccrelay gateway exited unexpectedly")
     finally:
         proxy.stop()
         signal.signal(signal.SIGINT, old_sigint)

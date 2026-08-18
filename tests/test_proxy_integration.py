@@ -54,12 +54,17 @@ HTTPServer((args.host, args.port), Handler).serve_forever()
 
     proxy = ProxyProcess(settings)
     proxy.start(timeout=5)
+    gateway = proxy.gateway
     try:
         assert proxy.process is not None
         assert proxy.process.poll() is None
+        assert gateway is not None
+        assert gateway.is_alive()
     finally:
         proxy.stop()
 
     assert proxy.process is not None
     assert proxy.process.poll() is not None
+    assert gateway is not None
+    assert not gateway.is_alive()
     assert "integration-secret" not in settings.log_path.read_text()

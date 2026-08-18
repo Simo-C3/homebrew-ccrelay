@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "ccrelay"
 version = "0.3.0"
-description = "Relay Codex requests to GitHub Copilot through a local LiteLLM proxy."
+description = "Route Codex model requests to GitHub Copilot while preserving built-in imagegen."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
 license = { text = "MIT" }

@@ -51,15 +51,15 @@ class ShellMode(StrEnum):
 
 app = typer.Typer(
     name="ccrelay",
-    help="Relay Codex requests to GitHub Copilot through a local LiteLLM proxy.",
+    help="Route Codex model requests to GitHub Copilot while preserving built-in imagegen.",
     no_args_is_help=True,
 )
 proxy_app = typer.Typer(
-    help="Run and configure the foreground LiteLLM proxy.",
+    help="Run and configure the foreground ccrelay gateway.",
     invoke_without_command=True,
     no_args_is_help=False,
 )
-service_app = typer.Typer(help="Manage the proxy with Homebrew Services.")
+service_app = typer.Typer(help="Manage the gateway with Homebrew Services.")
 codex_app_cli = typer.Typer(help="Switch Codex App between ccrelay and its previous provider.")
 app.add_typer(proxy_app, name="proxy")
 app.add_typer(service_app, name="service")
@@ -86,7 +86,7 @@ def main(
         ),
     ] = False,
 ) -> None:
-    """Relay Codex requests to GitHub Copilot through a local LiteLLM proxy."""
+    """Route Codex model requests to GitHub Copilot while preserving built-in imagegen."""
 
 
 @app.command()

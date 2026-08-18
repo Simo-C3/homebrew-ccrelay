@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import stat
+from hashlib import sha256
 
 import pytest
 from tomlkit import parse
@@ -44,7 +45,10 @@ def test_enable_and_disable_restore_codex_config(monkeypatch, tmp_path) -> None:
     assert document["model"] == "original"
     assert document["model_provider"] == "ccrelay"
     assert provider["base_url"] == "http://127.0.0.1:4141/v1"
-    assert provider["experimental_bearer_token"] == "sk-ccrelay-secret"
+    assert provider["requires_openai_auth"] is True
+    assert provider["supports_websockets"] is False
+    assert provider["http_headers"]["X-CCRelay-Key"] == "sk-ccrelay-secret"
+    assert "experimental_bearer_token" not in provider
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
     assert "# keep this comment" in config_path.read_text()
 
@@ -171,10 +175,11 @@ def test_disable_preserves_changed_provider_table(monkeypatch, tmp_path) -> None
     assert restored["model_providers"]["ccrelay"]["base_url"].endswith(":9999/v1")
     assert restored["model_providers"]["ccrelay"]["custom_setting"] is True
     assert "experimental_bearer_token" not in restored["model_providers"]["ccrelay"]
+    assert "http_headers" not in restored["model_providers"]["ccrelay"]
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o644
 
 
-def test_disable_keeps_private_mode_for_changed_token(monkeypatch, tmp_path) -> None:
+def test_disable_keeps_private_mode_for_changed_local_key(monkeypatch, tmp_path) -> None:
     codex_home = tmp_path / "codex"
     codex_home.mkdir()
     config_path = codex_home / "config.toml"
@@ -184,17 +189,17 @@ def test_disable_keeps_private_mode_for_changed_token(monkeypatch, tmp_path) -> 
     monkeypatch.setenv("CCRELAY_STATE_DIR", str(tmp_path / "state"))
     enable_codex_app(settings(tmp_path))
     document = parse(config_path.read_text())
-    document["model_providers"]["ccrelay"]["experimental_bearer_token"] = "user-token"
+    document["model_providers"]["ccrelay"]["http_headers"]["X-CCRelay-Key"] = "user-key"
     config_path.write_text(document.as_string())
 
     disabled = disable_codex_app()
     restored = parse(config_path.read_text())
 
-    assert restored["model_providers"]["ccrelay"]["experimental_bearer_token"] == "user-token"
+    assert restored["model_providers"]["ccrelay"]["http_headers"]["X-CCRelay-Key"] == "user-key"
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
     assert disabled.preserved_changes == (
         "model_providers.ccrelay",
-        "file permissions (restricted to protect the preserved token)",
+        "file permissions (restricted to protect the preserved local key)",
     )
 
 
@@ -233,7 +238,9 @@ def test_enable_updates_an_unchanged_managed_provider(monkeypatch, tmp_path) -> 
     document = parse((codex_home / "config.toml").read_text())
     provider = document["model_providers"]["ccrelay"]
     assert provider["base_url"] == "http://127.0.0.1:4242/v1"
-    assert provider["experimental_bearer_token"] == "sk-ccrelay-updated"
+    assert provider["http_headers"]["X-CCRelay-Key"] == "sk-ccrelay-updated"
+    assert provider["requires_openai_auth"] is True
+    assert "experimental_bearer_token" not in provider
 
 
 def test_disable_preserves_changed_file_permissions(monkeypatch, tmp_path) -> None:
@@ -321,3 +328,60 @@ def test_enable_migrates_legacy_backup(monkeypatch, tmp_path) -> None:
     assert "model" not in backup
     assert backup["applied"]["model_provider"] == "ccrelay"
     assert "sk-ccrelay-secret" not in backup_path.read_text()
+    assert document["model_providers"]["ccrelay"]["requires_openai_auth"] is True
+    assert (
+        document["model_providers"]["ccrelay"]["http_headers"]["X-CCRelay-Key"]
+        == "sk-ccrelay-secret"
+    )
+    assert "experimental_bearer_token" not in document["model_providers"]["ccrelay"]
+
+
+def test_enable_migrates_unchanged_version_3_bearer_provider(monkeypatch, tmp_path) -> None:
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    config_path = codex_home / "config.toml"
+    config_path.write_text(
+        'model_provider = "ccrelay"\n'
+        "[model_providers.ccrelay]\n"
+        'name = "ccrelay GitHub Copilot"\n'
+        'base_url = "http://127.0.0.1:4141/v1"\n'
+        'experimental_bearer_token = "sk-ccrelay-secret"\n'
+        'wire_api = "responses"\n'
+        "stream_idle_timeout_ms = 300000\n"
+    )
+    config_path.chmod(0o600)
+    document = parse(config_path.read_text())
+    provider = document["model_providers"]["ccrelay"]
+    state_dir = tmp_path / "state"
+    backup_path = state_dir / "service" / "codex-app-backup.json"
+    backup_path.parent.mkdir(parents=True)
+    backup_path.write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "config_path": str(config_path),
+                "config_existed": True,
+                "config_mode": 0o644,
+                "trailing_newlines": 1,
+                "model_provider": {"present": True, "value": "openai"},
+                "applied": {
+                    "model_provider": "ccrelay",
+                    "provider_fingerprint": sha256(
+                        provider.as_string().encode("utf-8")
+                    ).hexdigest(),
+                    "token_fingerprint": sha256(b"sk-ccrelay-secret").hexdigest(),
+                    "config_mode": 0o600,
+                    "trailing_newlines": 1,
+                },
+            }
+        )
+    )
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("CCRELAY_STATE_DIR", str(state_dir))
+
+    enable_codex_app(settings(tmp_path))
+
+    migrated = parse(config_path.read_text())["model_providers"]["ccrelay"]
+    assert migrated["requires_openai_auth"] is True
+    assert migrated["http_headers"]["X-CCRelay-Key"] == "sk-ccrelay-secret"
+    assert "experimental_bearer_token" not in migrated

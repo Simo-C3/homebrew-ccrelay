@@ -1,7 +1,9 @@
 # はじめに
 
-`ccrelay` は、Codex のリクエストをローカルの LiteLLM 経由で GitHub Copilot Chat API に
-転送します。プロキシは `127.0.0.1` のみで待ち受けます。
+`ccrelay` は、Codex の通常のモデルリクエストをローカルの LiteLLM 経由で GitHub Copilot
+Chat API に転送します。組み込みの `imagegen` が使う画像リクエストだけは、Codex でログイン
+している ChatGPT の画像バックエンドへ転送します。ゲートウェイは `127.0.0.1` のみで
+待ち受けます。
 
 ## 前提条件
 
@@ -9,6 +11,10 @@
 - Homebrew
 - GitHub Copilot を利用できる GitHub アカウント
 - Codex CLI または Codex App
+- Codex での ChatGPT ログイン（組み込み `imagegen` には ChatGPT Free 以外のプランが必要）
+
+画像生成に `OPENAI_API_KEY` は不要です。ChatGPT の認証情報は画像経路だけで使われ、LiteLLM や
+GitHub Copilot には転送されません。
 
 利用前に GitHub・所属組織の規約を確認してください。このプロジェクトは実験的な実装であり、
 互換性、課金経路、アカウントへの影響を保証しません。
@@ -56,7 +62,8 @@ ccrelay codex-app status
 
 有効化後に Codex App を再起動してください。設定先は `$CODEX_HOME/config.toml`、
 `CODEX_HOME` が未設定なら `~/.codex/config.toml` です。既存のモデル設定や無関係な設定は
-保持されます。
+保持されます。旧版の `experimental_bearer_token` 形式を利用している場合も、もう一度
+`ccrelay codex-app enable` を実行すると新しい形式へ移行されます。
 
 元のプロバイダーに戻す場合も、先に変更内容を確認できます。
 
@@ -71,16 +78,33 @@ ccrelay codex-app disable
 eval "$(ccrelay proxy setenv)"
 ```
 
-出力されるローカルキーは秘密情報として扱ってください。
+Codex CLI 用の手動設定例は次のとおりです。
+
+```toml
+model_provider = "ccrelay"
+
+[model_providers.ccrelay]
+name = "ccrelay GitHub Copilot"
+base_url = "http://127.0.0.1:4141/v1"
+wire_api = "responses"
+requires_openai_auth = true
+supports_websockets = false
+env_http_headers = { X-CCRelay-Key = "CCRELAY_PROXY_KEY" }
+```
+
+出力されるローカルキーは秘密情報として扱ってください。`requires_openai_auth` を有効にすることで
+Codex の ChatGPT ログインが維持され、組み込み `imagegen` が画像経路を利用できます。
 
 ## 5. 経路の確認
 
 稼働しているだけでは、意図した課金経路を通ったことは確認できません。通常利用の前に、小さな
 プロンプトを1回実行し、次を確認してください。
 
-1. GitHub Copilot の利用量が想定どおり増えた。
+1. 通常のテキストリクエストで GitHub Copilot の利用量が想定どおり増えた。
 2. OpenAI API の利用量が増えていない。
 3. 読み取り、ファイル編集、シェル実行が正常に動く。
+4. `imagegen` を使う場合は、画像生成が ChatGPT アカウント側で扱われ、GitHub Copilot や
+   OpenAI API キー経由になっていない。
 
 不明点がある場合は利用を止め、規約、組織ポリシー、課金状況を確認してください。
 
