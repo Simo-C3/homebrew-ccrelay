@@ -1,12 +1,18 @@
 # ccrelay
 
-`ccrelay` (Codex-Copilot Relay) is a loopback-only LiteLLM proxy server that
-routes Codex requests to LiteLLM's `github_copilot` provider. It does not wrap
-or launch Codex.
+`ccrelay` (Codex-Copilot Relay) is a loopback-only gateway that routes Codex
+model requests to LiteLLM's `github_copilot` provider. Codex's built-in image
+generation endpoints are routed separately to the signed-in ChatGPT backend.
+It does not wrap or launch Codex.
 
 ```text
-Codex -> 127.0.0.1 LiteLLM /v1/responses -> GitHub Copilot Chat API
+Codex /v1/responses -> 127.0.0.1 ccrelay -> internal LiteLLM -> GitHub Copilot
+Codex /v1/images/*  -> 127.0.0.1 ccrelay -> ChatGPT Codex image backend
 ```
+
+The image route uses Codex's existing ChatGPT login and does not require
+`OPENAI_API_KEY`. The local gateway never forwards ChatGPT authorization or
+account headers to LiteLLM or GitHub Copilot.
 
 > [!WARNING]
 > This is an experimental, single-user proof of concept. LiteLLM's
@@ -21,6 +27,8 @@ Codex -> 127.0.0.1 LiteLLM /v1/responses -> GitHub Copilot Chat API
 - Homebrew
 - A GitHub account entitled to use GitHub Copilot
 - Codex CLI or Codex App
+- A ChatGPT login in Codex when using the managed provider; a non-Free ChatGPT
+  plan is required for Codex's built-in `imagegen`
 
 ## Install
 
@@ -164,15 +172,21 @@ value is stored in the private `ccrelay` state directory and restored by
 `disable`.
 
 Codex App does not reliably inherit shell environment variables. For that
-reason, the local proxy key is written to the managed provider as
-`experimental_bearer_token`, and the Codex configuration is restricted to mode
-`0600` while enabled. The key only authenticates to the loopback-only proxy.
+reason, the local proxy key is written to the managed provider as an
+`X-CCRelay-Key` HTTP header, and the Codex configuration is restricted to mode
+`0600` while enabled. The provider also sets `requires_openai_auth = true` so
+Codex keeps its ChatGPT authentication available to the built-in `imagegen`.
+The key only authenticates to the loopback-only gateway.
+
+After upgrading from a version that used `experimental_bearer_token`, run
+`ccrelay codex-app enable` again and restart Codex App. An unchanged legacy
+provider is migrated automatically.
 
 Disabling uses a three-way merge. Values that still match what ccrelay wrote are
 restored or removed, while changes made after enabling are kept and reported.
 This includes edits to `model_provider`, the managed provider table, file
-permissions, and trailing newlines. An unchanged ccrelay bearer token is removed
-from a modified provider table; if a modified token remains, private file
+permissions, and trailing newlines. An unchanged ccrelay local key is removed
+from a modified provider table; if a modified key remains, private file
 permissions are retained. No force-overwrite option is needed.
 
 Useful commands:
@@ -199,12 +213,14 @@ Do not assume that successful output proves the intended billing route. Before
 regular use:
 
 1. Record GitHub Copilot usage and OpenAI API usage.
-2. Run one small prompt through Codex.
+2. Run one small text prompt through Codex.
 3. Confirm GitHub Copilot usage increased as expected.
 4. Confirm OpenAI API usage did not increase.
 5. Exercise a read, file edit, and shell tool call to verify Responses API tool
    compatibility.
-6. Stop if GitHub's terms, organization policy, billing attribution, or tool
+6. If using `imagegen`, generate one small image and confirm it is accounted for
+   by the signed-in ChatGPT account rather than GitHub Copilot or an OpenAI API key.
+7. Stop if GitHub's terms, organization policy, billing attribution, or tool
    compatibility is unclear.
 
 Proxy logs are stored below the platform-specific `ccrelay/service` cache

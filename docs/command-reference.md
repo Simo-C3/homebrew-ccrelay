@@ -22,7 +22,9 @@
 
 ### `ccrelay proxy run`
 
-前景でプロキシを起動します。従来の `ccrelay proxy` も同じ動作です。
+前景でゲートウェイと内部 LiteLLM を起動します。従来の `ccrelay proxy` も同じ動作です。
+通常のモデルリクエストは LiteLLM へ、Codex 組み込み画像生成のリクエストは ChatGPT へ
+転送されます。
 
 | オプション | 説明 | 既定値 |
 | --- | --- | --- |
@@ -85,6 +87,10 @@ URL も更新されるため、実行後に Codex App を再起動してくだ�
 
 `--dry-run` はファイルを書き換えず、対象と変更内容だけを表示します。`disable` は ccrelay が
 変更した値だけを戻し、有効化後に加えられた利用者の変更を可能な範囲で保持します。
+
+`enable` が作るプロバイダーは `requires_openai_auth = true` を設定し、ローカル認証には
+`X-CCRelay-Key` を使います。これにより通常のモデル経路を GitHub Copilot に保ったまま、
+Codex でログイン中の ChatGPT 認証を組み込み `imagegen` の画像経路だけに利用できます。
 
 ## 終了ステータス
 
