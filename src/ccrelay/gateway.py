@@ -77,6 +77,10 @@ class GatewayRouter:
                 or bearer_authorized
             ):
                 raise GatewayRequestError(401, "ChatGPT authentication is required for imagegen")
+            # Codex does not advertise response-compression support for image requests.  Without
+            # an explicit value, httpx adds its own ``Accept-Encoding`` header and can make the
+            # ChatGPT backend return compressed JSON that Codex then tries to decode as JSON.
+            forwarded["accept-encoding"] = "identity"
             suffix = parsed.path.removeprefix("/v1")
             target = f"{self.chatgpt_base_url.rstrip('/')}{suffix}"
         else:
@@ -211,7 +215,7 @@ class _RelayRequestHandler(BaseHTTPRequestHandler):
                 headers=upstream.headers,
                 content=body,
             ) as response:
-                self._relay_response(response)
+                self._relay_response(response, decode_content=upstream.is_image_request)
         except GatewayRequestError as exc:
             self._send_json(exc.status_code, str(exc))
         except (httpx.HTTPError, OSError):
@@ -229,9 +233,11 @@ class _RelayRequestHandler(BaseHTTPRequestHandler):
             raise GatewayRequestError(400, "Invalid Content-Length")
         return self.rfile.read(length)
 
-    def _relay_response(self, response: httpx.Response) -> None:
+    def _relay_response(self, response: httpx.Response, *, decode_content: bool = False) -> None:
         has_body = self.command != "HEAD" and response.status_code not in {204, 304}
-        content_length = response.headers.get("Content-Length")
+        content_encoding = response.headers.get("Content-Encoding")
+        normalize_encoding = decode_content and content_encoding is not None
+        content_length = None if normalize_encoding else response.headers.get("Content-Length")
         use_chunked = has_body and content_length is None
 
         self.send_response(response.status_code)
@@ -241,6 +247,8 @@ class _RelayRequestHandler(BaseHTTPRequestHandler):
             if name.strip()
         }
         excluded = _HOP_BY_HOP_HEADERS | connection_headers | {"date", "server"}
+        if normalize_encoding:
+            excluded = excluded | {"content-encoding", "content-length"}
         for name, value in response.headers.multi_items():
             lowered = name.lower()
             if lowered in excluded or (lowered == "content-length" and use_chunked):
@@ -253,7 +261,8 @@ class _RelayRequestHandler(BaseHTTPRequestHandler):
         if not has_body:
             return
         try:
-            for chunk in response.iter_raw():
+            chunks = response.iter_bytes() if normalize_encoding else response.iter_raw()
+            for chunk in chunks:
                 if not chunk:
                     continue
                 if use_chunked:

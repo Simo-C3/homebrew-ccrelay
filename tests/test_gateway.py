@@ -52,7 +52,21 @@ def test_image_request_routes_only_to_chatgpt(path: str) -> None:
     assert upstream.is_image_request
     assert upstream.headers["authorization"] == "Bearer chatgpt-access-token"
     assert upstream.headers["chatgpt-account-id"] == "account-id"
+    assert upstream.headers["accept-encoding"] == "identity"
     assert "x-ccrelay-key" not in upstream.headers
+
+
+def test_image_request_overrides_client_compression() -> None:
+    upstream = router().route(
+        "/v1/images/edits",
+        {
+            "X-CCRelay-Key": "sk-ccrelay-secret",
+            "Authorization": "Bearer chatgpt-access-token",
+            "Accept-Encoding": "gzip, deflate",
+        },
+    )
+
+    assert upstream.headers["accept-encoding"] == "identity"
 
 
 def test_legacy_bearer_key_authenticates_non_image_requests() -> None:
