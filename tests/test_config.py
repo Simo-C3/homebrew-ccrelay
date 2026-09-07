@@ -48,6 +48,7 @@ def test_litellm_config_registers_responses_only_models_exactly(tmp_path) -> Non
     for deployment in deployments:
         router.add_pattern(deployment["model_name"], deployment)
 
+    assert "gpt-6" in COPILOT_RESPONSES_ONLY_MODELS
     assert [deployment["model_name"] for deployment in exact_deployments] == list(
         COPILOT_RESPONSES_ONLY_MODELS
     )

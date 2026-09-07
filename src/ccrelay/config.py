@@ -9,6 +9,7 @@ from ccrelay.settings import RuntimeSettings
 # LiteLLM's Copilot Responses gate looks up concrete provider/model keys. A
 # wildcard deployment alone does not register those keys and falls back to chat.
 COPILOT_RESPONSES_ONLY_MODELS = (
+    "gpt-6",
     "gpt-5.3-codex",
     "gpt-5.5",
     "gpt-5.6-luna",

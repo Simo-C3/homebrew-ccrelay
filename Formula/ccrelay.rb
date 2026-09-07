@@ -1,15 +1,10 @@
 class Ccrelay < Formula
   desc "Local GitHub Copilot proxy for Codex"
   homepage "https://github.com/Simo-C3/homebrew-ccrelay"
-  url "https://github.com/Simo-C3/homebrew-ccrelay/releases/download/v0.4.1/ccrelay-0.4.1.tar.gz"
-  sha256 "c435bc6bf6f48f7d3b5400bf0e4d74eaee05a1accdd5e7edb916d9799d38db07"
+  url "https://github.com/Simo-C3/homebrew-ccrelay/releases/download/v0.5.0/ccrelay-0.5.0.tar.gz"
+  sha256 "80c0192668b8afd363bb319c313def017533b64c84c69084f8deb4883d06eead"
   license "MIT"
   head "https://github.com/Simo-C3/homebrew-ccrelay.git", branch: "main"
-
-  bottle do
-    root_url "https://github.com/Simo-C3/homebrew-ccrelay/releases/download/v0.4.1"
-    sha256 arm64_sequoia: "38897b4dd88d826fe52625b76eb00546841d9ef33b6bb9ed9fa89b7700605a93"
-  end
 
   depends_on "rust" => :build
   depends_on "uv" => :build
